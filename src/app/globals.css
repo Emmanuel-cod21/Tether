@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+/*
+ * Tether's brand palette — a dark, violet-forward theme used unconditionally
+ * (not gated behind prefers-color-scheme) so the app looks the same on any
+ * demo machine regardless of the viewer's OS setting.
+ */
+@theme {
+  --color-bg: #0b0a14;
+  --color-surface: #15121f;
+  --color-surface-2: #1c1830;
+  --color-line: #2b2640;
+  --color-fg: #f4f2fb;
+  --color-muted: #9c93b8;
+
+  --color-brand: #7c5cfc;
+  --color-brand-hover: #6a46e8;
+  --color-brand-fg: #ffffff;
+
+  /* status colors, named to match the app's own status strings */
+  --color-pending: #9c93b8;
+  --color-done: #2dd4bf;
+  --color-missed: #fb923c;
+}
+
+@theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-brand) 45%, transparent);
+  color: var(--color-fg);
+}
