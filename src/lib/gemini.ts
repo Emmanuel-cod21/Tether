@@ -5,8 +5,46 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 export type ExtractedTask = { title: string; due_at: string | null };
 
 /**
+ * Thrown when the Gemini API call itself fails (quota, auth, network) —
+ * as opposed to the model succeeding but returning something we can't
+ * parse into tasks, which just yields an empty list.
+ */
+export class GeminiExtractionError extends Error {
+  status?: number;
+  constructor(message: string, status?: number) {
+    super(message);
+    this.name = "GeminiExtractionError";
+    this.status = status;
+  }
+}
+
+function classifyGeminiError(err: unknown): GeminiExtractionError {
+  const status = (err as { status?: number } | null)?.status;
+  if (status === 429) {
+    return new GeminiExtractionError(
+      "Gemini's free-tier quota for this Google Cloud project is used up for today. Use an API key from a different Google Cloud project/account, or enable billing on this one, then try again.",
+      429
+    );
+  }
+  if (status === 401 || status === 403) {
+    return new GeminiExtractionError(
+      "Gemini rejected the API key (invalid, revoked, or missing access). Check GEMINI_API_KEY on the server.",
+      status
+    );
+  }
+  return new GeminiExtractionError(
+    "Couldn't reach Gemini to extract tasks. Check server logs and try again.",
+    status
+  );
+}
+
+/**
  * Turns pasted syllabus text / a task list / a calendar export into
  * structured {title, due_at} tasks.
+ *
+ * Throws GeminiExtractionError if the Gemini API call itself fails
+ * (quota exceeded, bad key, network). Returns [] only when the call
+ * succeeded but the response couldn't be parsed into tasks.
  */
 export async function extractTasks(rawText: string): Promise<ExtractedTask[]> {
   const model = genAI.getGenerativeModel({ model: "gemini-3.6-flash" });
@@ -24,9 +62,16 @@ TEXT:
 ${rawText}
 """`;
 
+  let text: string;
   try {
     const result = await model.generateContent(prompt);
-    const text = result.response.text().trim();
+    text = result.response.text().trim();
+  } catch (err) {
+    console.error("Gemini extractTasks failed:", err);
+    throw classifyGeminiError(err);
+  }
+
+  try {
     const cleaned = text
       .replace(/^```json\s*/i, "")
       .replace(/^```\s*/i, "")
@@ -35,7 +80,7 @@ ${rawText}
     const parsed = JSON.parse(cleaned);
     return Array.isArray(parsed) ? parsed : [];
   } catch (err) {
-    console.error("Gemini extractTasks failed:", err);
+    console.error("Gemini extractTasks: response wasn't valid JSON:", err, text);
     return [];
   }
 }

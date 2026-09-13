@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { nanoid } from "nanoid";
 import pool from "@/lib/db";
-import { extractTasks, type ExtractedTask } from "@/lib/gemini";
+import { extractTasks, GeminiExtractionError, type ExtractedTask } from "@/lib/gemini";
 import { fetchCanvasTasks } from "@/lib/canvas";
 import { fetchSlackTasks } from "@/lib/slack";
 
@@ -56,7 +56,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: message }, { status: 400 });
     }
   } else {
-    tasks = await extractTasks(rawText!);
+    try {
+      tasks = await extractTasks(rawText!);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to extract tasks";
+      const status =
+        err instanceof GeminiExtractionError && err.status === 429 ? 429 : 502;
+      return NextResponse.json({ error: message }, { status });
+    }
   }
 
   const ownerToken = nanoid(10);
